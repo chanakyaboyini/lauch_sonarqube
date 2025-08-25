@@ -20,7 +20,7 @@ pipeline {
   stages {
     stage('Prepare AWS CLI & User Data') {
       steps {
-        sh '''
+        sh '''#!/bin/bash
           set -euo pipefail
 
           # Prepare userdata script that installs Docker and runs SonarQube
