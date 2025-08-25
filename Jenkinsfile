@@ -2,10 +2,10 @@ pipeline {
   agent any
 
   environment {
-    AWS_REGION   = 'ap-south-1'                // Change if needed
-    VPC_ID       = '<your-vpc-id>'             // e.g., vpc-0abc123def456
-    SUBNET_ID    = '<your-subnet-id>'          // e.g., subnet-0123abcd
-    KEY_NAME     = '<your-ec2-keypair>'        // Optional if you want SSH access
+    AWS_REGION   = 'us-east-1'                // Change if needed
+    VPC_ID       = 'vpc-00856bf74da11cc87'             // e.g., vpc-0abc123def456
+    SUBNET_ID    = 'subnet-03e723a43edad34d9'          // e.g., subnet-0123abcd
+    KEY_NAME     = 'SonarQube.pem'        // Optional if you want SSH access
     INSTANCE_TYPE= 't3.medium'                 // SonarQube needs >= 2 vCPU, 4GB RAM recommended
     SG_NAME      = "sonarqube-sg-${env.BUILD_NUMBER}"
     TAG_NAME     = "sonarqube-${env.BUILD_NUMBER}"
