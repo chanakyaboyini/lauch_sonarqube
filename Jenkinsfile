@@ -109,36 +109,40 @@ EOF'''
     }
 
     stage('Launch EC2 with SonarQube') {
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: "${AWS_CRED_ID}",
-          usernameVariable: 'AWS_ACCESS_KEY_ID',
-          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-        )]) {
-          sh '''bash -euxo pipefail << 'EOF'
-# Load security group ID
+  steps {
+    withCredentials([usernamePassword(
+      credentialsId: "${AWS_CRED_ID}",
+      usernameVariable: 'AWS_ACCESS_KEY_ID',
+      passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+    )]) {
+      sh '''bash -euxo pipefail << 'EOF'
+# load the security-group id we saved earlier
 source sg.env
 
-# Lookup latest Amazon Linux 2 AMI (SSM Parameter)
+# look up the latest Amazon Linux 2 AMI
 AMI_ID=$(aws ssm get-parameters \
   --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 \
   --query 'Parameters[0].Value' --output text)
 
-# Launch EC2 instance with our userdata
-RUN_JSON=$(aws ec2 run-instances \
-  --image-id "$AMI_ID" \
-  --instance-type "${INSTANCE_TYPE}" \
-  --subnet-id "${SUBNET_ID}" \
-  --security-group-ids "$SG_ID" \
-  --user-data file://userdata.sh \
-  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${TAG_NAME}}]" \
-  --count 1)
+echo "Launching SonarQube on AMI $AMI_ID in subnet $SUBNET_ID (SG: $SG_ID)"
 
-RUN_JSON=$(aws ec2 run-instances …)
-INSTANCE_ID=$(echo "$RUN_JSON" | jq -r '.Instances[0].InstanceId')
+# actually launch the instance and capture its ID
+INSTANCE_ID=$(aws ec2 run-instances \
+  --image-id        "$AMI_ID" \
+  --instance-type   "$INSTANCE_TYPE" \
+  --subnet-id       "$SUBNET_ID" \
+  --security-group-ids "$SG_ID" \
+  --key-name        "$KEY_NAME" \
+  --user-data       file://userdata.sh \
+  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${TAG_NAME}}]" \
+  --count           1 \
+  --query           'Instances[0].InstanceId' \
+  --output          text)
+
+# save it for the next stage
 echo "INSTANCE_ID=${INSTANCE_ID}" > ec2.env
 
-# Wait until running, then fetch the public IP
+# wait until it's running, then fetch its public IP
 aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
 PUBLIC_IP=$(aws ec2 describe-instances \
   --instance-ids "$INSTANCE_ID" \
@@ -146,12 +150,11 @@ PUBLIC_IP=$(aws ec2 describe-instances \
   --output text)
 echo "PUBLIC_IP=${PUBLIC_IP}" >> ec2.env
 
-echo "SonarQube available at http://${PUBLIC_IP}:9000"
+echo "✔️ SonarQube launched: http://${PUBLIC_IP}:9000"
 EOF'''
-        }
-      }
     }
-
+  }
+}
     stage('Output') {
       steps {
         script {
