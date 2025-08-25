@@ -11,7 +11,7 @@ pipeline {
     TAG_NAME      = "sonarqube-${env.BUILD_NUMBER}"
 
     // Jenkins credential ID for AWS (Username = AWS_ACCESS_KEY_ID, Password = AWS_SECRET_ACCESS_KEY)
-    AWS_CRED_ID   = 'aws-cred'
+    AWS_CRED_ID   = 'AWS'
   }
 
   options {
