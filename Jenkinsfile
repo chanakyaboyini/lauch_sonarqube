@@ -20,7 +20,7 @@ pipeline {
         stage('Prepare AWS CLI & User Data') {
             steps {
                 sh '''#!/bin/bash
-set -euo pipefail
+
 
 # Prepare userdata script
 cat > userdata.sh <<'EOF'
