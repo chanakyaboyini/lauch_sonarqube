@@ -5,7 +5,7 @@ pipeline {
     AWS_REGION    = 'us-east-1'
     VPC_ID        = 'vpc-00856bf74da11cc87'
     SUBNET_ID     = 'subnet-03e723a43edad34d9'
-    KEY_NAME      = 'SonarQube.pem'
+    //KEY_NAME      = 'SonarQube.pem'
     INSTANCE_TYPE = 't3.medium'
     SG_NAME       = "sonarqube-sg-${env.BUILD_NUMBER}"
     TAG_NAME      = "sonarqube-${env.BUILD_NUMBER}"
