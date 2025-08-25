@@ -132,7 +132,6 @@ INSTANCE_ID=$(aws ec2 run-instances \
   --instance-type   "$INSTANCE_TYPE" \
   --subnet-id       "$SUBNET_ID" \
   --security-group-ids "$SG_ID" \
-  --key-name        "$KEY_NAME" \
   --user-data       file://userdata.sh \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${TAG_NAME}}]" \
   --count           1 \
