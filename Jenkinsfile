@@ -134,6 +134,7 @@ RUN_JSON=$(aws ec2 run-instances \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${TAG_NAME}}]" \
   --count 1)
 
+RUN_JSON=$(aws ec2 run-instances …)
 INSTANCE_ID=$(echo "$RUN_JSON" | jq -r '.Instances[0].InstanceId')
 echo "INSTANCE_ID=${INSTANCE_ID}" > ec2.env
 
