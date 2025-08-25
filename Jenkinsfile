@@ -5,7 +5,7 @@ pipeline {
     AWS_REGION    = 'us-east-1'
     VPC_ID        = 'vpc-00856bf74da11cc87'
     SUBNET_ID     = 'subnet-03e723a43edad34d9'
-    //KEY_NAME      = 'SonarQube.pem'
+    KEY_NAME      = 'SonarQube.pem'
     INSTANCE_TYPE = 't3.medium'
     SG_NAME       = "sonarqube-sg-${env.BUILD_NUMBER}"
     TAG_NAME      = "sonarqube-${env.BUILD_NUMBER}"
@@ -130,6 +130,7 @@ RUN_JSON=$(aws ec2 run-instances \
   --instance-type "${INSTANCE_TYPE}" \
   --subnet-id "${SUBNET_ID}" \
   --security-group-ids "$SG_ID" \
+  --key-name "${KEY_NAME}" \
   --user-data file://userdata.sh \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${TAG_NAME}}]" \
   --count 1)
