@@ -18,7 +18,17 @@ pipeline {
 
   stages {
     stage('Prepare AWS CLI & User Data') {
-      steps {
+      steps  {
+        // credsId is the ID of a "Username and password" credential,
+        // where Username = AWS_ACCESS_KEY_ID, Password = AWS_SECRET_ACCESS_KEY
+        withCredentials([
+          usernamePassword(
+            credentialsId: 'aws-cred',
+            usernameVariable: 'AWS_ACCESS_KEY_ID',
+            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+          )
+        ]) 
+      {
         sh '''bash -euxo pipefail <<'EOF'
 # Write out userdata.sh
 cat > userdata.sh <<'EOD'
