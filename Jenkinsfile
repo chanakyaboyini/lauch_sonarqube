@@ -67,7 +67,7 @@ chmod +x userdata.sh
             steps {
                 withAWS(credentials: "${env.AWS_CRED_ID}", region: "${env.AWS_REGION}") {
                     sh '''#!/bin/bash
-set -euo pipefail
+
 
 MY_IP="$(curl -s https://checkip.amazonaws.com || true)"
 if [ -n "$MY_IP" ]; then
@@ -100,7 +100,7 @@ echo "Created Security Group: $SG_ID with ingress from $CIDR"
             steps {
                 withAWS(credentials: "${env.AWS_CRED_ID}", region: "${env.AWS_REGION}") {
                     sh '''#!/bin/bash
-set -euo pipefail
+ 
 source sg.env
 
 AMI_ID=$(aws ssm get-parameters \
