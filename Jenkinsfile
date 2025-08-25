@@ -1,35 +1,31 @@
 pipeline {
-    agent any
+  agent any
 
-    environment {
-        AWS_REGION    = 'us-east-1'
-        VPC_ID        = 'vpc-00856bf74da11cc87'
-        SUBNET_ID     = 'subnet-03e723a43edad34d9'
-        KEY_NAME      = 'SonarQube.pem'
-        INSTANCE_TYPE = 't3.medium'
-        SG_NAME       = "sonarqube-sg-${env.BUILD_NUMBER}"
-        TAG_NAME      = "sonarqube-${env.BUILD_NUMBER}"
-        AWS_CRED_ID   = 'aws-cred'
-    }
+  environment {
+    AWS_REGION    = 'us-east-1'
+    VPC_ID        = 'vpc-00856bf74da11cc87'
+    SUBNET_ID     = 'subnet-03e723a43edad34d9'
+    KEY_NAME      = 'SonarQube.pem'
+    INSTANCE_TYPE = 't3.medium'
+    SG_NAME       = "sonarqube-sg-${env.BUILD_NUMBER}"
+    TAG_NAME      = "sonarqube-${env.BUILD_NUMBER}"
+    AWS_CRED_ID   = 'aws-cred'
+  }
 
-    options {
-        timestamps()
-    }
+  options {
+    timestamps()
+  }
 
-    stages {
-        stage('Prepare AWS CLI & User Data') {
-            steps {
-                script {
-                    sh(
-                        script: '''\
-set -euo pipefail
-
-# Build userdata.sh that installs Docker & starts SonarQube
-cat > userdata.sh <<'EOF'
+  stages {
+    stage('Prepare AWS CLI & User Data') {
+      steps {
+        sh '''bash -euxo pipefail <<'EOF'
+# Write out userdata.sh
+cat > userdata.sh <<'EOD'
 #!/bin/bash
 set -eux
 
-# Ensure running as root
+# Ensure root
 if [ "$(id -u)" -ne 0 ]; then
   exec sudo -H bash "$0" "$@"
 fi
@@ -49,83 +45,70 @@ else
   systemctl enable docker && systemctl start docker
 fi
 
-# Prepare SonarQube data volumes
+# Prepare data dirs
 mkdir -p /opt/sonarqube/{data,extensions,logs}
 
-# Launch SonarQube container (LTS)
-docker run -d --name sonarqube \
-  --restart always \
-  -p 9000:9000 \
-  -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
-  -v /opt/sonarqube/data:/opt/sonarqube/data \
-  -v /opt/sonarqube/extensions:/opt/sonarqube/extensions \
-  -v /opt/sonarqube/logs:/opt/sonarqube/logs \
+# Launch SonarQube container
+docker run -d --name sonarqube \\
+  --restart always \\
+  -p 9000:9000 \\
+  -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \\
+  -v /opt/sonarqube/data:/opt/sonarqube/data \\
+  -v /opt/sonarqube/extensions:/opt/sonarqube/extensions \\
+  -v /opt/sonarqube/logs:/opt/sonarqube/logs \\
   sonarqube:lts-community
-EOF
+EOD
 
 chmod +x userdata.sh
-''',
-                        shell: '/bin/bash'
-                    )
-                }
-            }
-        }
+EOF'''
+      }
+    }
 
-        stage('Provision Security Group') {
-            steps {
-                withAWS(credentials: "${env.AWS_CRED_ID}", region: "${env.AWS_REGION}") {
-                    script {
-                        sh(
-                            script: '''\
-set -euo pipefail
-
-# Restrict access to your IP (fallback to 0.0.0.0/0)
-MY_IP="$(curl -s https://checkip.amazonaws.com || true)"
+    stage('Provision Security Group') {
+      steps {
+        withAWS(credentials: "${env.AWS_CRED_ID}", region: "${env.AWS_REGION}") {
+          sh '''bash -euxo pipefail <<'EOF'
+# Determine caller IP
+MY_IP=$(curl -s https://checkip.amazonaws.com || echo "")
 if [ -n "$MY_IP" ]; then
   CIDR="${MY_IP}/32"
 else
   CIDR="0.0.0.0/0"
 fi
 
-# Create security group
+# Create SG
 SG_ID=$(aws ec2 create-security-group \
   --group-name "${SG_NAME}" \
   --description "SonarQube SG for build ${BUILD_NUMBER}" \
   --vpc-id "${VPC_ID}" \
-  --query 'GroupId' --output text)
+  --query GroupId --output text)
 echo "SG_ID=${SG_ID}" > sg.env
 
-# Open SSH (22) and SonarQube UI (9000)
+# Open ports 22 & 9000
 aws ec2 authorize-security-group-ingress --group-id "$SG_ID" \
   --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=${CIDR},Description=\\"SSH from Jenkins\\"}]"
 aws ec2 authorize-security-group-ingress --group-id "$SG_ID" \
   --ip-permissions "IpProtocol=tcp,FromPort=9000,ToPort=9000,IpRanges=[{CidrIp=${CIDR},Description=\\"SonarQube UI\\"}]"
 
-echo "Created Security Group: $SG_ID with ingress from $CIDR"
-''',
-                            shell: '/bin/bash'
-                        )
-                    }
-                }
-            }
+echo "Created SG $SG_ID with ingress from $CIDR"
+EOF'''
         }
+      }
+    }
 
-        stage('Launch EC2 with SonarQube') {
-            steps {
-                withAWS(credentials: "${env.AWS_CRED_ID}", region: "${env.AWS_REGION}") {
-                    script {
-                        sh(
-                            script: '''\
-set -euo pipefail
+    stage('Launch EC2 with SonarQube') {
+      steps {
+        withAWS(credentials: "${env.AWS_CRED_ID}", region: "${env.AWS_REGION}") {
+          sh '''bash -euxo pipefail <<'EOF'
+# Load the SG ID
 source sg.env
 
-# Fetch latest Amazon Linux 2 AMI via SSM
+# Lookup latest Amazon Linux 2 AMI via SSM
 AMI_ID=$(aws ssm get-parameters \
   --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 \
   --query 'Parameters[0].Value' --output text)
-echo "Using AMI: $AMI_ID"
 
-# Launch EC2 instance with our userdata
+# Launch EC2 instance
 RUN_JSON=$(aws ec2 run-instances \
   --image-id "$AMI_ID" \
   --instance-type "${INSTANCE_TYPE}" \
@@ -139,43 +122,36 @@ RUN_JSON=$(aws ec2 run-instances \
 INSTANCE_ID=$(echo "$RUN_JSON" | jq -r '.Instances[0].InstanceId')
 echo "INSTANCE_ID=${INSTANCE_ID}" > ec2.env
 
-# Wait then retrieve Public IP
+# Wait for it to be up, then grab the IP
 aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
 PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
   --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
 echo "PUBLIC_IP=${PUBLIC_IP}" >> ec2.env
 
-echo "SonarQube will be available at http://${PUBLIC_IP}:9000"
-''',
-                            shell: '/bin/bash'
-                        )
-                    }
-                }
-            }
+echo "SonarQube available @ http://${PUBLIC_IP}:9000"
+EOF'''
         }
-
-        stage('Output') {
-            steps {
-                script {
-                    def envFile = readFile('ec2.env')
-                    echo envFile
-
-                    def ip = sh(
-                        returnStdout: true,
-                        script: "awk -F= '/PUBLIC_IP/{print \$2}' ec2.env | tr -d '\\n'",
-                        shell: '/bin/bash'
-                    ).trim()
-
-                    echo "Open SonarQube UI → http://${ip}:9000"
-                    echo "Default login: admin / admin (you’ll be prompted to change password)"
-                }
-            }
-        }
+      }
     }
 
-    post {
-        always {
-            archiveArtifacts artifacts: '*.env', onlyIfSuccessful: false
+    stage('Output') {
+      steps {
+        script {
+          echo readFile('ec2.env')
+          def ip = sh(
+            script: "awk -F= '/PUBLIC_IP/{print \$2}' ec2.env",
+            returnStdout: true
+          ).trim()
+          echo "→ SonarQube UI: http://${ip}:9000"
+          echo "   Default creds: admin / admin"
         }
+      }
     }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: '*.env', onlyIfSuccessful: false
+    }
+  }
 }
